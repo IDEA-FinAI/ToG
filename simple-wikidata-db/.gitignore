@@ -1,0 +1,11 @@
+data/
+__pycache__/
+.vscode/
+.pytest_cache/
+*.egg-info/
+*.out
+
+server_log**
+**.log
+
+mlflow/
