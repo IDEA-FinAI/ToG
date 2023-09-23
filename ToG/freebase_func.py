@@ -1,8 +1,4 @@
-import re
-import openai
-import urllib
 from SPARQLWrapper import SPARQLWrapper, JSON
-import time
 SPARQLPATH = "http://192.168.80.12:8890/sparql"  # depend on your own ip address and port, shown in Freebase folder's readme.md
 
 # pre-defined sparqls

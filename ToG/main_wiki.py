@@ -1,4 +1,3 @@
-import json
 from tqdm import tqdm
 import argparse
 import random
@@ -12,24 +11,26 @@ if __name__ == '__main__':
                         default="cwq", help="choose the dataset.")
     parser.add_argument("--max_length", type=int,
                         default=256, help="the max length of LLMs output.")
-    parser.add_argument("--temperature_exploration", type=int,
+    parser.add_argument("--temperature_exploration", type=float,
                         default=0.4, help="the temperature in exploration stage.")
-    parser.add_argument("--temperature_reasoning", type=int,
-                        default=0.4, help="the temperature in reasoning stage.")
+    parser.add_argument("--temperature_reasoning", type=float,
+                        default=0, help="the temperature in reasoning stage.")
     parser.add_argument("--width", type=int,
                         default=3, help="choose the search width of ToG.")
     parser.add_argument("--depth", type=int,
                         default=3, help="choose the search depth of ToG.")
-    parser.add_argument("--remove_unnecessary_rel", type=int,
+    parser.add_argument("--remove_unnecessary_rel", type=bool,
                         default=True, help="whether removing unnecessary relations.")
-    parser.add_argument("--LLM_type", type=int,
+    parser.add_argument("--LLM_type", type=str,
                         default="gpt-3.5-turbo", help="base LLM model.")
-    parser.add_argument("--opeani_api_keys", type=int,
+    parser.add_argument("--opeani_api_keys", type=str,
                         default="", help="if the LLM_type is gpt-3.5-turbo or gpt-4, you need add your own openai api keys.")
     parser.add_argument("--num_retain_entity", type=int,
                         default=5, help="Number of entities retained during entities search.")
+    parser.add_argument("--prune_tools", type=str,
+                        default="llm", help="prune tools for ToG, can be llm (same as LLM_type), bm25 or sentencebert.")
     parser.add_argument("--addr_list", type=int,
-                        default=5, help="Number of entities retained during entities search.")
+                        default="server_urls.txt", help="The address of the Wikidata service.")
     args = parser.parse_args()
         
     datas, question_string = prepare_dataset(args.dataset)

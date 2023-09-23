@@ -1,4 +1,4 @@
-from  freebase_func import *
+from freebase_func import *
 from prompt_list import *
 import json
 from rank_bm25 import BM25Okapi
@@ -264,7 +264,7 @@ def generate_answer(question, cluster_chain_of_entities, args):
 
 
 def save_2_jsonl(question, answer, cluster_chain_of_entities, file_name):
-    dict = {"question":question, "turbo_results": answer, "chains": cluster_chain_of_entities}
+    dict = {"question":question, "results": answer, "reasoning_chains": cluster_chain_of_entities}
     with open("ToG_{}.jsonl".format(file_name), "a") as outfile:
         json_str = json.dumps(dict)
         outfile.write(json_str + "\n")
