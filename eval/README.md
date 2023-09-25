@@ -13,7 +13,7 @@ python eval.py \  # if you wanna use Wikidata as KG source, run main_wiki.py
 
 After that, you will get a result json file that contains:
 
-```json
+```sh
 {
     'dataset': 
     'method': 

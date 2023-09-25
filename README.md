@@ -2,6 +2,23 @@
 
 The code for paper: "Think-on-Graph: Deep and Responsible Reasoning of Large Language Model with Knowledge Graph".
 
+## Project Structure
+- `requirements.txt`: Pip environment file.
+- `data/`: Evaluation datasets. See `data/README.md` for details.
+- `CoT/`: CoT methods. See `CoT/README.md` for details.
+- `eval/`: Evaluation script. See `eval/README.md` for details.
+- `Freebase/`: Freebase environment setting. See `Freebase/README.md` for details.
+- `Wikidata/`: Wikidata environment setting. See `Wikidata/README.md` for details.
+- `tools/`: Common tools used in ToG. See `tools/README.md` for details.
+- `ToG/`: Source codes.
+  - `client.py`: Pre-defined Wikidata APIs, copy from `Wikidata/`.
+  - `server_urls.txt`: Wikidata server urls, copy from `Wikidata/`.
+  - `main_freebase.py`: The main file of ToG where Freebase as KG source. See `README.md` for details.
+  - `main_wiki.py`: Same as above but using Wikidata as KG source. See `README.md` for details.
+  - `prompt_list.py`: The prompts for the ToG to pruning, reasoning and generating.
+  - `freebase_func.py`: All the functions used in `main_freebase.py`.
+  - `wiki_func.py`: All the functions used in `main_wiki.py`.
+  - `utils.py`: All the functions used in ToG.
 
 ## Get started
 Before running ToG, please ensure that you have successfully installed either **Freebase** or **Wikidata** on your local machine. The comprehensive installation instructions and necessary configuration details can be found in the `README.md` file located within the respective folder.
@@ -12,24 +29,7 @@ When using the Wikidata service, copy the `client.py` and `server_urls.txt` file
 
 
 # How to run
-Upon successfully installing all the necessary configurations, you can proceed to execute ToG directly by employing the following command:
-
-```sh
-python main_freebase.py \  # if you wanna use Wikidata as KG source, run main_wiki.py
---dataset cwq \ # dataset your wanna test, see ToG/data/README.md
---max_length 256 \ 
---temperature_exploration 0.4 \ # the temperature in exploration stage.
---temperature_exploration 0 \ # the temperature in reasoning stage.
---width 3 \ # choose the search width of ToG, 3 is the default setting.
---depth 3 \ # choose the search depth of ToG, 3 is the default setting.
---remove_unnecessary_rel True \ # whether removing unnecessary relations.
---LLM_type gpt-3.5-turbo \ # the LLM you choose
---opeani_api_keys sk-xxxx \ # your own api keys, if LLM_type == llama, this parameter would be rendered ineffective.
---num_retain_entity 5 \ # Number of entities retained during entities search.
---prune_tools llm \ # prune tools for ToG, can be llm (same as LLM_type), bm25 or sentencebert.
-```
-
-All the pruning and reasoning prompts utilized in the experiment are in the `prompt_list.py` file.
+See `ToG/` README.md
 
 # How to eval
 Upon obtaining the result file, such as `ToG_cwq.jsonl`, you should using the `jsonl2json.py` script from the `tools` directory to convert the `ToG_cwq.jsonl` to `ToG_cwq.json`. Then, evaluate using the script in the `eval` folder (see `README.md` in `eval` folder).
