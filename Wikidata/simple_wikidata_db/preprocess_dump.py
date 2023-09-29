@@ -5,7 +5,7 @@ This script preprocesses the raw Wikidata dump (in JSON format) and sorts triple
 Example command:
 
 python3 preprocess_dump.py \
-    --input_file /lfs/raiders8/0/lorr1/wikidata/raw_data/latest-all.json.gz \
+    --input_file latest-all.json.gz \
     --out_dir data/processed
 
 """
