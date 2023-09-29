@@ -1,6 +1,6 @@
 # ToG
 
-The code for paper: "Think-on-Graph: Deep and Responsible Reasoning of Large Language Model with Knowledge Graph".
+The code for paper: "Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph".
 
 ## Project Structure
 - `requirements.txt`: Pip environment file.
@@ -35,5 +35,17 @@ See `ToG/` README.md
 Upon obtaining the result file, such as `ToG_cwq.jsonl`, you should using the `jsonl2json.py` script from the `tools` directory to convert the `ToG_cwq.jsonl` to `ToG_cwq.json`. Then, evaluate using the script in the `eval` folder (see `README.md` in `eval` folder).
 
 
+# How to cite
+If you interested or inspired by this work, you can cite us by:
+```sh
+@misc{sun2023thinkongraph,
+      title={Think-on-Graph: Deep and Responsible Reasoning of Large Language Model with Knowledge Graph}, 
+      author={Jiashuo Sun and Chengjin Xu and Lumingyuan Tang and Saizhuo Wang and Chen Lin and Yeyun Gong and Heung-Yeung Shum and Jian Guo},
+      year={2023},
+      eprint={2307.07697},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+```
 # Claims
 This project uses the Apache 2.0 protocol. The project assumes no legal responsibility for any of the model's output and will not be held liable for any damages that may result from the use of the resources and output.
