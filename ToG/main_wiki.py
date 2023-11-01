@@ -93,7 +93,8 @@ if __name__ == '__main__':
                 half_stop(question, cluster_chain_of_entities, args)
                 break
                 
-            flag, cluster_chain_of_entities, entities_id, pre_relations, pre_heads = entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args, wiki_client)
+            flag, chain_of_entities, entities_id, pre_relations, pre_heads = entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args, wiki_client)
+            cluster_chain_of_entities.append(chain_of_entities)
             if flag:
                 stop, results = reasoning(question, cluster_chain_of_entities, args)
                 if stop:

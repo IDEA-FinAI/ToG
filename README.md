@@ -2,6 +2,14 @@
 
 The code for paper: ["Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph"](https://arxiv.org/pdf/2307.07697.pdf).
 
+## Here is the illustration of ToG:
+
+![image](https://github.com/GasolSun36/ToG/assets/demo.png)
+
+## The pipeline of ToG:
+
+![image](https://github.com/GasolSun36/ToG/assets/methods.png)
+
 ## Project Structure
 - `requirements.txt`: Pip environment file.
 - `data/`: Evaluation datasets. See `data/README.md` for details.
@@ -47,5 +55,17 @@ If you interested or inspired by this work, you can cite us by:
       primaryClass={cs.CL}
 }
 ```
+
+# Experiment:
+
+![image](https://github.com/GasolSun36/ToG/assets/experiments.png)
+
+
+# Application:
+
+![image](https://github.com/GasolSun36/ToG/assets/application.png)
+
+
+
 # Claims
 This project uses the Apache 2.0 protocol. The project assumes no legal responsibility for any of the model's output and will not be held liable for any damages that may result from the use of the resources and output.
