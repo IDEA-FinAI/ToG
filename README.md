@@ -4,11 +4,11 @@ The code for paper: ["Think-on-Graph: Deep and Responsible Reasoning of Large La
 
 ## Here is the illustration of ToG:
 
-![image](https://github.com/GasolSun36/ToG/assets/demo.png)
+![image](https://github.com/GasolSun36/ToG/blob/main/assets/demo.png)
 
 ## The pipeline of ToG:
 
-![image](https://github.com/GasolSun36/ToG/assets/methods.png)
+![image](https://github.com/GasolSun36/ToG/blob/main/assets/methods.png)
 
 ## Project Structure
 - `requirements.txt`: Pip environment file.
@@ -58,12 +58,12 @@ If you interested or inspired by this work, you can cite us by:
 
 # Experiment:
 
-![image](https://github.com/GasolSun36/ToG/assets/experiments.png)
+![image](https://github.com/GasolSun36/ToG/blob/main/assets/experiments.png)
 
 
 # Application:
 
-![image](https://github.com/GasolSun36/ToG/assets/application.png)
+![image](https://github.com/GasolSun36/ToG/blob/main/assets/application.png)
 
 
 
