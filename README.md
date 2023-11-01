@@ -1,6 +1,6 @@
 # ToG
 
-The code for paper: "Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph".
+The code for paper: ["Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph"](https://arxiv.org/pdf/2307.07697.pdf).
 
 ## Project Structure
 - `requirements.txt`: Pip environment file.
