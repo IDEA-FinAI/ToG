@@ -8,7 +8,7 @@ from client import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str,
-                        default="webqsp", help="choose the dataset.")
+                        default="cwq", help="choose the dataset.")
     parser.add_argument("--max_length", type=int,
                         default=256, help="the max length of LLMs output.")
     parser.add_argument("--temperature_exploration", type=float,
@@ -32,12 +32,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     datas, question_string = prepare_dataset(args.dataset)
-    print("Start Running ToG on %s dataset." % args.dataset)
+
     for data in tqdm(datas):
         question = data[question_string]
         topic_entity = data['topic_entity']
         cluster_chain_of_entities = []
-        pre_relations = []
+        pre_relations = [], 
         pre_heads= [-1] * len(topic_entity)
         flag_printed = False
         for depth in range(1, args.depth+1):
@@ -61,19 +61,18 @@ if __name__ == '__main__':
                 else:
                     entity_candidates_id = entity_search(entity['entity'], entity['relation'], False)
                 
-                if args.prune_tools == "llm":
-                    if len(entity_candidates_id) >=20:
-                        entity_candidates_id = random.sample(entity_candidates_id, args.num_retain_entity)
+                if len(entity_candidates_id) >=20:
+                    entity_candidates_id = random.sample(entity_candidates_id, args.num_retain_entity)
 
                 if len(entity_candidates_id) ==0:
                     continue
+
                 scores, entity_candidates, entity_candidates_id = entity_score(question, entity_candidates_id, entity['score'], entity['relation'], args)
                 
                 total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head = update_history(entity_candidates, entity, scores, entity_candidates_id, total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head)
             
             if len(total_candidates) ==0:
-                half_stop(question, cluster_chain_of_entities, depth, args)
-                flag_printed = True
+                half_stop(question, cluster_chain_of_entities, args)
                 break
                 
             flag, chain_of_entities, entities_id, pre_relations, pre_heads = entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args)
@@ -84,14 +83,12 @@ if __name__ == '__main__':
                     print("ToG stoped at depth %d." % depth)
                     save_2_jsonl(question, results, cluster_chain_of_entities, file_name=args.dataset)
                     flag_printed = True
-                    break
                 else:
                     print("depth %d still not find the answer." % depth)
-                    topic_entity = {entity: id2entity_name_or_type(entity) for entity in entities_id}
+                    topic_entity = {entity: id2entity_name_or_type[entity] for entity in entities_id}
                     continue
             else:
-                half_stop(question, cluster_chain_of_entities, depth, args)
-                flag_printed = True
+                half_stop(question, cluster_chain_of_entities, args)
         
         if not flag_printed:
             results = generate_without_explored_paths(question, args)

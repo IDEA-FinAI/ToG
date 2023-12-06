@@ -1,5 +1,5 @@
 from SPARQLWrapper import SPARQLWrapper, JSON
-SPARQLPATH = "http://192.168.80.12:8890/sparql"  # depend on your own internal address and port, shown in Freebase folder's readme.md
+SPARQLPATH = "http://xxx.xxx.xxx.xxx/sparql"  # depend on your own internal address and port, shown in Freebase folder's readme.md
 
 # pre-defined sparqls
 sparql_head_relations = """\nPREFIX ns: <http://rdf.freebase.com/ns/>\nSELECT ?relation\nWHERE {\n  ns:%s ?relation ?x .\n}"""
@@ -17,9 +17,9 @@ def abandon_rels(relation):
         return True
 
 
-def execurte_sparql(sparql_query):
+def execurte_sparql(sparql_txt):
     sparql = SPARQLWrapper(SPARQLPATH)
-    sparql.setQuery(sparql_query)
+    sparql.setQuery(sparql_txt)
     sparql.setReturnFormat(JSON)
     results = sparql.query().convert()
     return results["results"]["bindings"]
@@ -33,9 +33,9 @@ def replace_entities_prefix(entities):
 
 
 def id2entity_name_or_type(entity_id):
-    sparql_query = sparql_id % (entity_id, entity_id)
+    sparql = sparql_id % (entity_id, entity_id)
     sparql = SPARQLWrapper(SPARQLPATH)
-    sparql.setQuery(sparql_query)
+    sparql.setQuery(sparql)
     sparql.setReturnFormat(JSON)
     results = sparql.query().convert()
     if len(results["results"]["bindings"])==0:

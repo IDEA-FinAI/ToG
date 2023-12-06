@@ -1,10 +1,6 @@
 from freebase_func import *
 from prompt_list import *
 import json
-import time
-import openai
-import re
-from prompt_list import *
 from rank_bm25 import BM25Okapi
 from sentence_transformers import util
 from sentence_transformers import SentenceTransformer
@@ -94,18 +90,16 @@ def clean_relations_bm25_sent(topn_relations, topn_scores, entity_id, head_relat
     relations = []
     if if_all_zero(topn_scores):
         topn_scores = [float(1/len(topn_scores))] * len(topn_scores)
-    i=0
     for relation in topn_relations:
         if relation in head_relations:
             relations.append({"entity": entity_id, "relation": relation, "score": topn_scores[i], "head": True})
         else:
             relations.append({"entity": entity_id, "relation": relation, "score": topn_scores[i], "head": False})
-        i+=1
     return True, relations
 
 
 def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-turbo"):
-    if "llama" in engine.lower():
+    if "llama" not in engine.lower():
         openai.api_key = "EMPTY"
         openai.api_base = "http://localhost:8000/v1"  # your local llama server port
         engine = openai.Model.list()["data"][0]["id"]
@@ -115,7 +109,7 @@ def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-tu
     messages = [{"role":"system","content":"You are an AI assistant that helps people find information."}]
     message_prompt = {"role":"user","content":prompt}
     messages.append(message_prompt)
-    f = 0
+    print("start openai")
     while(f == 0):
         try:
             response = openai.ChatCompletion.create(
@@ -130,6 +124,7 @@ def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-tu
         except:
             print("openai error, retry")
             time.sleep(2)
+    print("end openai")
     return result
 
 def construct_relation_prune_prompt(question, entity_name, total_relations, args):
@@ -152,10 +147,10 @@ def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, quest
         head_relations = [relation for relation in head_relations if not abandon_rels(relation)]
         tail_relations = [relation for relation in tail_relations if not abandon_rels(relation)]
     
-    if pre_head:
-        tail_relations = list(set(tail_relations) - set(pre_relations))
-    else:
-        head_relations = list(set(head_relations) - set(pre_relations))
+
+    if len(pre_relations) != 0 and pre_head !=-1:
+        tail_relations = [rel for rel in tail_relations if not pre head or rel not in pre_relations]
+        head_relations = [rel for rel in head_relations if pre_head or rel not in pre_relations]
 
     head_relations = list(set(head_relations))
     tail_relations = list(set(tail_relations))
@@ -199,7 +194,7 @@ def entity_search(entity, relation, head=True):
 def entity_score(question, entity_candidates_id, score, relation, args):
     entity_candidates = [id2entity_name_or_type(entity_id) for entity_id in entity_candidates_id]
     if all_unknown_entity(entity_candidates):
-        return [1/len(entity_candidates) * score] * len(entity_candidates), entity_candidates, entity_candidates_id
+        return [1/len(entity_candidates) * score] * len(entity_candidates), entity_candidates
     entity_candidates = del_unknown_entity(entity_candidates)
     if len(entity_candidates) == 1:
         return [score], entity_candidates, entity_candidates_id
@@ -212,7 +207,7 @@ def entity_score(question, entity_candidates_id, score, relation, args):
     entity_candidates = list(entity_candidates)
     entity_candidates_id = list(entity_candidates_id)
     if args.prune_tools == "llm":
-        prompt = construct_entity_score_prompt(question, relation, entity_candidates)
+        prompt = construct_entity_score_prompt(question, relation, entity_candidates, score)
 
         result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
         return [float(x) * score for x in clean_scores(result, entity_candidates)], entity_candidates, entity_candidates_id
@@ -319,14 +314,14 @@ def if_true(prompt):
         return True
     return False
 
-def half_stop(question, cluster_chain_of_entities, depth, args):
-    print("No new knowledge added during search depth %d, stop searching." % depth)
+def half_stop(question, cluster_chain_of_entities, args):
+    print("No new knowledge added during search depth %d, stop searching." % args.depth)
     answer = generate_answer(question, cluster_chain_of_entities, args)
     save_2_jsonl(question, answer, cluster_chain_of_entities, file_name=args.dataset)
 
 
 def generate_without_explored_paths(question, args):
-    prompt = cot_prompt + "\n\nQ: " + question + "\nA:"
+    prompt = generate_directly + "\n\nQ: " + question + "\nA:"
     response = run_llm(prompt, args.temperature_reasoning, args.max_length, args.opeani_api_keys, args.LLM_type)
     return response
 
