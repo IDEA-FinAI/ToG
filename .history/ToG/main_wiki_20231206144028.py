@@ -8,7 +8,7 @@ from client import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str,
-                        default="webqsp", help="choose the dataset.")
+                        default="cwq", help="choose the dataset.")
     parser.add_argument("--max_length", type=int,
                         default=256, help="the max length of LLMs output.")
     parser.add_argument("--temperature_exploration", type=float,
@@ -29,20 +29,21 @@ if __name__ == '__main__':
                         default=5, help="Number of entities retained during entities search.")
     parser.add_argument("--prune_tools", type=str,
                         default="llm", help="prune tools for ToG, can be llm (same as LLM_type), bm25 or sentencebert.")
-    parser.add_argument("--addr_list", type=str,
+    parser.add_argument("--addr_list", type=int,
                         default="server_urls.txt", help="The address of the Wikidata service.")
     args = parser.parse_args()
         
     datas, question_string = prepare_dataset(args.dataset)
-    print("Start Running ToG on %s dataset." % args.dataset)
+
     for data in tqdm(datas):
         question = data[question_string]
-        topic_entity = data['qid_topic_entity']
+        topic_entity = data['topic_entity']
         cluster_chain_of_entities = []
-        pre_relations = []
+        pre_relations = [], 
         pre_heads= [-1] * len(topic_entity)
         flag_printed = False
-        with open(args.addr_list, "r") as f:
+        addr_list = 'ToG/ToG-E/server_urls.txt'
+        with open(addr_list, "r") as f:
             server_addrs = f.readlines()
             server_addrs = [addr.strip() for addr in server_addrs]
         print(f"Server addresses: {server_addrs}")
@@ -65,11 +66,10 @@ if __name__ == '__main__':
             for entity in current_entity_relations_list:
                 value_flag=False
                 if entity['head']:
-                    entity_candidates_id, entity_candidates_name = entity_search(entity['entity'], entity['relation'], wiki_client, True)
+                    entity_candidates_id, entity_candidates_name = entity_search(entity['entity'], entity['relation'], True)
                 else:
-                    entity_candidates_id, entity_candidates_name = entity_search(entity['entity'], entity['relation'], wiki_client, False)
-                if len(entity_candidates_name)==0:
-                    continue
+                    entity_candidates_id, entity_candidates_name = entity_search(entity['entity'], entity['relation'], False)
+
                 if len(entity_candidates_id) ==0: # values
                     value_flag=True
                     if len(entity_candidates_name) >=20:
@@ -90,8 +90,7 @@ if __name__ == '__main__':
                 total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head = update_history(entity_candidates, entity, scores, entity_candidates_id, total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head, value_flag)
             
             if len(total_candidates) ==0:
-                half_stop(question, cluster_chain_of_entities, depth, args)
-                flag_printed = True
+                half_stop(question, cluster_chain_of_entities, args)
                 break
                 
             flag, chain_of_entities, entities_id, pre_relations, pre_heads = entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args, wiki_client)
@@ -102,14 +101,12 @@ if __name__ == '__main__':
                     print("ToG stoped at depth %d." % depth)
                     save_2_jsonl(question, results, cluster_chain_of_entities, file_name=args.dataset)
                     flag_printed = True
-                    break
                 else:
                     print("depth %d still not find the answer." % depth)
-                    topic_entity = {qid: topic for qid, topic in zip(entities_id, [wiki_client.query_all("qid2label", entity).pop() for entity in entities_id])}
+                    topic_entity = {entity: wiki_client.query_all("qid2label", entity) for entity in entities_id}
                     continue
             else:
-                half_stop(question, cluster_chain_of_entities, depth, args)
-                flag_printed = True
+                half_stop(question, cluster_chain_of_entities, args)
         
         if not flag_printed:
             results = generate_without_explored_paths(question, args)

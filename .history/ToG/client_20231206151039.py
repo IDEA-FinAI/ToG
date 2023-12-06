@@ -4,6 +4,7 @@ import typing as tp
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+from simple_wikidata_db.db_deploy.utils import Entity, Relation, a_factory
 import requests
 from bs4 import BeautifulSoup
 
@@ -104,11 +105,11 @@ class MultiServerWikidataQueryClient:
     def __init__(self, urls: tp.List[str]):
         self.clients = [WikidataQueryClient(url) for url in urls]
         self.executor = ThreadPoolExecutor(max_workers=len(urls))
-        # # test connections
-        # start_time = time.perf_counter()
-        # self.test_connections()
-        # end_time = time.perf_counter()
-        # print(f"Connection testing took {end_time - start_time} seconds")
+        # test connections
+        start_time = time.perf_counter()
+        self.test_connections()
+        end_time = time.perf_counter()
+        print(f"Connection testing took {end_time - start_time} seconds")
 
     def test_connections(self):
         def test_url(client):

@@ -1,20 +1,73 @@
+from freebase_func import *
 from prompt_list import *
 import json
+import time
 import openai
 import re
-import time
+from prompt_list import *
+from rank_bm25 import BM25Okapi
+from sentence_transformers import util
+from sentence_transformers import SentenceTransformer
+
+def retrieve_top_docs(query, docs, model, width=3):
+    """
+    Retrieve the topn most relevant documents for the given query.
+
+    Parameters:
+    - query (str): The input query.
+    - docs (list of str): The list of documents to search from.
+    - model_name (str): The name of the SentenceTransformer model to use.
+    - width (int): The number of top documents to return.
+
+    Returns:
+    - list of float: A list of scores for the topn documents.
+    - list of str: A list of the topn documents.
+    """
+
+    query_emb = model.encode(query)
+    doc_emb = model.encode(docs)
+
+    scores = util.dot_score(query_emb, doc_emb)[0].cpu().tolist()
+
+    doc_score_pairs = sorted(list(zip(docs, scores)), key=lambda x: x[1], reverse=True)
+
+    top_docs = [pair[0] for pair in doc_score_pairs[:width]]
+    top_scores = [pair[1] for pair in doc_score_pairs[:width]]
+
+    return top_docs, top_scores
 
 
-def transform_relation(relation):
-    relation_without_prefix = relation.replace("wiki.relation.", "").replace("_", " ")
-    return relation_without_prefix
+def compute_bm25_similarity(query, corpus, width=3):
+    """
+    Computes the BM25 similarity between a question and a list of relations,
+    and returns the topn relations with the highest similarity along with their scores.
+
+    Args:
+    - question (str): Input question.
+    - relations_list (list): List of relations.
+    - width (int): Number of top relations to return.
+
+    Returns:
+    - list, list: topn relations with the highest similarity and their respective scores.
+    """
+
+    tokenized_corpus = [doc.split(" ") for doc in corpus]
+    bm25 = BM25Okapi(tokenized_corpus)
+    tokenized_query = query.split(" ")
+
+    doc_scores = bm25.get_scores(tokenized_query)
+    
+    relations = bm25.get_top_n(tokenized_query, corpus, n=width)
+    doc_scores = sorted(doc_scores, reverse=True)[:width]
+
+    return relations, doc_scores
+
 
 def clean_relations(string, entity_id, head_relations):
     pattern = r"{\s*(?P<relation>[^()]+)\s+\(Score:\s+(?P<score>[0-9.]+)\)}"
     relations=[]
     for match in re.finditer(pattern, string):
         relation = match.group("relation").strip()
-        relation = transform_relation(relation)
         if ';' in relation:
             continue
         score = match.group("score")
@@ -32,6 +85,23 @@ def clean_relations(string, entity_id, head_relations):
         return False, "No relations found"
     return True, relations
 
+
+def if_all_zero(topn_scores):
+    return all(score == 0 for score in topn_scores)
+
+
+def clean_relations_bm25_sent(topn_relations, topn_scores, entity_id, head_relations):
+    relations = []
+    if if_all_zero(topn_scores):
+        topn_scores = [float(1/len(topn_scores))] * len(topn_scores)
+    i=0
+    for relation in topn_relations:
+        if relation in head_relations:
+            relations.append({"entity": entity_id, "relation": relation, "score": topn_scores[i], "head": True})
+        else:
+            relations.append({"entity": entity_id, "relation": relation, "score": topn_scores[i], "head": False})
+        i+=1
+    return True, relations
 
 
 def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-turbo"):
@@ -63,30 +133,25 @@ def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-tu
     return result
 
 def construct_relation_prune_prompt(question, entity_name, total_relations, args):
-
-    return extract_relation_prompt_wiki % (args.width, args.width)+question+'\nTopic Entity: '+entity_name+ '\nRelations:\n'+'\n'.join([f"{i}. {item}" for i, item in enumerate(total_relations, start=1)])+'A:'
-
-
-def check_end_word(s):
-    words = [" ID", " code", " number", "instance of", "website", "URL", "inception", "image", " rate", " count"]
-    return any(s.endswith(word) for word in words)
-
-def abandon_rels(relation):
-    useless_relation_list = ["category's main topic", "topic\'s main category", "stack exchange site", 'main subject', 'country of citizenship', "commons category", "commons gallery", "country of origin", "country", "nationality"]
-    if check_end_word(relation) or 'wikidata' in relation.lower() or 'wikimedia' in relation.lower() or relation.lower() in useless_relation_list:
-        return True
-    return False
+    return extract_relation_prompt % (args.width, args.width) + question + '\nTopic Entity: ' + entity_name + '\nRelations: '+ '; '.join(total_relations) + "\nA: "
+        
 
 def construct_entity_score_prompt(question, relation, entity_candidates):
-    return score_entity_candidates_prompt_wiki.format(question, relation) + "; ".join(entity_candidates) + '\nScore: '
+    return score_entity_candidates_prompt.format(question, relation) + "; ".join(entity_candidates) + '\nScore: '
 
-def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, question, args, wiki_client):
-    relations = wiki_client.query_all("get_all_relations_of_an_entity", entity_id)
-    head_relations = [rel['label'] for rel in relations['head']]
-    tail_relations = [rel['label'] for rel in relations['tail']]
+def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, question, args):
+    sparql_relations_extract_head = sparql_head_relations % (entity_id)
+    head_relations = execurte_sparql(sparql_relations_extract_head)
+    head_relations = replace_relation_prefix(head_relations)
+    
+    sparql_relations_extract_tail= sparql_tail_relations % (entity_id)
+    tail_relations = execurte_sparql(sparql_relations_extract_tail)
+    tail_relations = replace_relation_prefix(tail_relations)
+
     if args.remove_unnecessary_rel:
         head_relations = [relation for relation in head_relations if not abandon_rels(relation)]
         tail_relations = [relation for relation in tail_relations if not abandon_rels(relation)]
+    
     if pre_head:
         tail_relations = list(set(tail_relations) - set(pre_relations))
     else:
@@ -97,65 +162,45 @@ def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, quest
     total_relations = head_relations+tail_relations
     total_relations.sort()  # make sure the order in prompt is always equal
     
-    prompt = construct_relation_prune_prompt(question, entity_name, total_relations, args)
+    if args.prune_tools == "llm":
+        prompt = construct_relation_prune_prompt(question, entity_name, total_relations, args)
 
-    result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
-    flag, retrieve_relations_with_scores = clean_relations(result, entity_id, head_relations) 
+        result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
+        flag, retrieve_relations_with_scores = clean_relations(result, entity_id, head_relations) 
+
+    elif args.prune_tools == "bm25":
+        topn_relations, topn_scores = compute_bm25_similarity(question, total_relations, args.width)
+        flag, retrieve_relations_with_scores = clean_relations_bm25_sent(topn_relations, topn_scores, entity_id, head_relations) 
+    else:
+        model = SentenceTransformer('sentence-transformers/msmarco-distilbert-base-tas-b')
+        topn_relations, topn_scores = retrieve_top_docs(question, total_relations, model, args.width)
+        flag, retrieve_relations_with_scores = clean_relations_bm25_sent(topn_relations, topn_scores, entity_id, head_relations) 
 
     if flag:
         return retrieve_relations_with_scores
     else:
         return [] # format error or too small max_length
     
-def del_all_unknown_entity(entity_candidates_id, entity_candidates_name):
-    if len(entity_candidates_name) == 1 and entity_candidates_name[0] == "N/A":
-        return entity_candidates_id, entity_candidates_name
-
-    new_candidates_id = []
-    new_candidates_name = []
-    for i, candidate in enumerate(entity_candidates_name):
-        if candidate != "N/A":
-            new_candidates_id.append(entity_candidates_id[i])
-            new_candidates_name.append(candidate)
-
-    return new_candidates_id, new_candidates_name
-
-def all_zero(topn_scores):
-    return all(score == 0 for score in topn_scores)
-
-def entity_search(entity, relation, wiki_client, head):
-    rid = wiki_client.query_all("label2pid", relation)
-    if not rid or rid == "Not Found!":
-        return [], []
     
-    rid_str = rid.pop()
-
-    entities = wiki_client.query_all("get_tail_entities_given_head_and_relation", entity, rid_str)
-    
+def entity_search(entity, relation, head=True):
     if head:
-        entities_set = entities['tail']
+        tail_entities_extract = sparql_tail_entities_extract% (entity, relation)
+        entities = execurte_sparql(tail_entities_extract)
     else:
-        entities_set = entities['head']
+        head_entities_extract = sparql_head_entities_extract% (entity, relation)
+        entities = execurte_sparql(head_entities_extract)
 
-    if not entities_set:
-        values = wiki_client.query_all("get_tail_values_given_head_and_relation", entity, rid_str)
-        return [], list(values)
 
-    id_list = [item['qid'] for item in entities_set]
-    name_list = [item['label'] if item['label'] != "N/A" else "Unname_Entity" for item in entities_set]
-    
-    return id_list, name_list
+    entity_ids = replace_entities_prefix(entities)
+    new_entity = [entity for entity in entity_ids if entity.startswith("m.")]
+    return new_entity
 
-def clean_scores(string, entity_candidates):
-    scores = re.findall(r'\d+\.\d+', string)
-    scores = [float(number) for number in scores]
-    if len(scores) == len(entity_candidates):
-        return scores
-    else:
-        print("All entities are created equal.")
-        return [1/len(entity_candidates)] * len(entity_candidates)
 
-def entity_score(question, entity_candidates_id, entity_candidates, score, relation, args):
+def entity_score(question, entity_candidates_id, score, relation, args):
+    entity_candidates = [id2entity_name_or_type(entity_id) for entity_id in entity_candidates_id]
+    if all_unknown_entity(entity_candidates):
+        return [1/len(entity_candidates) * score] * len(entity_candidates), entity_candidates, entity_candidates_id
+    entity_candidates = del_unknown_entity(entity_candidates)
     if len(entity_candidates) == 1:
         return [score], entity_candidates, entity_candidates_id
     if len(entity_candidates) == 0:
@@ -166,15 +211,20 @@ def entity_score(question, entity_candidates_id, entity_candidates, score, relat
     entity_candidates, entity_candidates_id = zip(*zipped_lists)
     entity_candidates = list(entity_candidates)
     entity_candidates_id = list(entity_candidates_id)
+    if args.prune_tools == "llm":
+        prompt = construct_entity_score_prompt(question, relation, entity_candidates)
 
-    prompt = construct_entity_score_prompt(question, relation, entity_candidates)
+        result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
+        return [float(x) * score for x in clean_scores(result, entity_candidates)], entity_candidates, entity_candidates_id
 
-    result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
-    entity_scores = clean_scores(result, entity_candidates)
-    if all_zero(entity_scores):
-        return [1/len(entity_candidates) * score] * len(entity_candidates), entity_candidates, entity_candidates_id
+    elif args.prune_tools == "bm25":
+        topn_entities, topn_scores = compute_bm25_similarity(question, entity_candidates, args.width)
     else:
-        return [float(x) * score for x in entity_scores], entity_candidates, entity_candidates_id
+        model = SentenceTransformer('sentence-transformers/msmarco-distilbert-base-tas-b')
+        topn_entities, topn_scores = retrieve_top_docs(question, entity_candidates, model, args.width)
+    if if_all_zero(topn_scores):
+        topn_scores = [float(1/len(topn_scores))] * len(topn_scores)
+    return [float(x) * score for x in topn_scores], topn_entities, entity_candidates_id
 
     
 def all_unknown_entity(entity_candidates):
@@ -186,10 +236,19 @@ def del_unknown_entity(entity_candidates):
     entity_candidates = [candidate for candidate in entity_candidates if candidate != "UnName_Entity"]
     return entity_candidates
 
+def clean_scores(string, entity_candidates):
+    scores = re.findall(r'\d+\.\d+', string)
+    scores = [float(number) for number in scores]
+    if len(scores) == len(entity_candidates):
+        return scores
+    else:
+        print("All entities are created equal.")
+        return [1/len(entity_candidates)] * len(entity_candidates)
 
-def update_history(entity_candidates, entity, scores, entity_candidates_id, total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head, value_flag):
-    if value_flag:
-        scores = [1/len(entity_candidates) * entity['score']]
+def update_history(entity_candidates, entity, scores, entity_candidates_id, total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head):
+    if len(entity_candidates) == 0:
+        entity_candidates.append("[FINISH]")
+        entity_candidates_id = ["[FINISH_ID]"]
     candidates_relation = [entity['relation']] * len(entity_candidates)
     topic_entities = [entity['entity']] * len(entity_candidates)
     head_num = [entity['head']] * len(entity_candidates)
@@ -199,13 +258,11 @@ def update_history(entity_candidates, entity, scores, entity_candidates_id, tota
     total_entities_id.extend(entity_candidates_id)
     total_topic_entities.extend(topic_entities)
     total_head.extend(head_num)
-
-
     return total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head
 
 
 def generate_answer(question, cluster_chain_of_entities, args): 
-    prompt = answer_prompt_wiki + question + '\n'
+    prompt = answer_prompt + question + '\n'
     chain_prompt = '\n'.join([', '.join([str(x) for x in chain]) for sublist in cluster_chain_of_entities for chain in sublist])
     prompt += "\nKnowledge Triplets: " + chain_prompt + 'A: '
     result = run_llm(prompt, args.temperature_reasoning, args.max_length, args.opeani_api_keys, args.LLM_type)
@@ -213,13 +270,13 @@ def generate_answer(question, cluster_chain_of_entities, args):
 
 
 def save_2_jsonl(question, answer, cluster_chain_of_entities, file_name):
-    dict = {"question":question, "turbo_results": answer, "chains": cluster_chain_of_entities}
+    dict = {"question":question, "results": answer, "reasoning_chains": cluster_chain_of_entities}
     with open("ToG_{}.jsonl".format(file_name), "a") as outfile:
         json_str = json.dumps(dict)
         outfile.write(json_str + "\n")
 
 
-def entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args, wiki_client):
+def entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args):
     zipped = list(zip(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores))
     sorted_zipped = sorted(zipped, key=lambda x: x[5], reverse=True)
     sorted_entities_id, sorted_relations, sorted_candidates, sorted_topic_entities, sorted_head, sorted_scores = [x[0] for x in sorted_zipped], [x[1] for x in sorted_zipped], [x[2] for x in sorted_zipped], [x[3] for x in sorted_zipped], [x[4] for x in sorted_zipped], [x[5] for x in sorted_zipped]
@@ -230,12 +287,14 @@ def entity_prune(total_entities_id, total_relations, total_candidates, total_top
     if len(filtered_list) ==0:
         return False, [], [], [], []
     entities_id, relations, candidates, tops, heads, scores = map(list, zip(*filtered_list))
-    tops = [wiki_client.query_all("qid2label", entity_id).pop() if (entity_name := wiki_client.query_all("qid2label", entity_id)) != "Not Found!" else "Unname_Entity" for entity_id in tops]
+
+    tops = [id2entity_name_or_type(entity_id) for entity_id in tops]
     cluster_chain_of_entities = [[(tops[i], relations[i], candidates[i]) for i in range(len(candidates))]]
     return True, cluster_chain_of_entities, entities_id, relations, heads
 
+
 def reasoning(question, cluster_chain_of_entities, args):
-    prompt = prompt_evaluate_wiki + question
+    prompt = prompt_evaluate + question
     chain_prompt = '\n'.join([', '.join([str(x) for x in chain]) for sublist in cluster_chain_of_entities for chain in sublist])
     prompt += "\nKnowledge Triplets: " + chain_prompt + 'A: '
 
@@ -267,7 +326,7 @@ def half_stop(question, cluster_chain_of_entities, depth, args):
 
 
 def generate_without_explored_paths(question, args):
-    prompt = generate_directly + "\n\nQ: " + question + "\nA:"
+    prompt = cot_prompt + "\n\nQ: " + question + "\nA:"
     response = run_llm(prompt, args.temperature_reasoning, args.max_length, args.opeani_api_keys, args.LLM_type)
     return response
 
@@ -309,6 +368,6 @@ def prepare_dataset(dataset_name):
             datas = json.load(f)
         question_string = 'sentence'
     else:
-        print("dataset not found")
+        print("dataset not found, you should pick from {cwq, webqsp, grailqa, simpleqa, qald, webquestions, trex, zeroshotre, creak}.")
         exit(-1)
     return datas, question_string

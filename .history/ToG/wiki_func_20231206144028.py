@@ -4,17 +4,11 @@ import openai
 import re
 import time
 
-
-def transform_relation(relation):
-    relation_without_prefix = relation.replace("wiki.relation.", "").replace("_", " ")
-    return relation_without_prefix
-
 def clean_relations(string, entity_id, head_relations):
     pattern = r"{\s*(?P<relation>[^()]+)\s+\(Score:\s+(?P<score>[0-9.]+)\)}"
     relations=[]
     for match in re.finditer(pattern, string):
         relation = match.group("relation").strip()
-        relation = transform_relation(relation)
         if ';' in relation:
             continue
         score = match.group("score")
@@ -35,7 +29,7 @@ def clean_relations(string, entity_id, head_relations):
 
 
 def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-turbo"):
-    if "llama" in engine.lower():
+    if "llama" not in engine.lower():
         openai.api_key = "EMPTY"
         openai.api_base = "http://localhost:8000/v1"  # your local llama server port
         engine = openai.Model.list()["data"][0]["id"]
@@ -45,7 +39,7 @@ def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-tu
     messages = [{"role":"system","content":"You are an AI assistant that helps people find information."}]
     message_prompt = {"role":"user","content":prompt}
     messages.append(message_prompt)
-    f = 0
+    print("start openai")
     while(f == 0):
         try:
             response = openai.ChatCompletion.create(
@@ -60,10 +54,10 @@ def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-tu
         except:
             print("openai error, retry")
             time.sleep(2)
+    print("end openai")
     return result
 
 def construct_relation_prune_prompt(question, entity_name, total_relations, args):
-
     return extract_relation_prompt_wiki % (args.width, args.width)+question+'\nTopic Entity: '+entity_name+ '\nRelations:\n'+'\n'.join([f"{i}. {item}" for i, item in enumerate(total_relations, start=1)])+'A:'
 
 
@@ -82,15 +76,16 @@ def construct_entity_score_prompt(question, relation, entity_candidates):
 
 def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, question, args, wiki_client):
     relations = wiki_client.query_all("get_all_relations_of_an_entity", entity_id)
-    head_relations = [rel['label'] for rel in relations['head']]
-    tail_relations = [rel['label'] for rel in relations['tail']]
+    head_relations = relations['head']
+    tail_relations = relations['tail']
+
     if args.remove_unnecessary_rel:
         head_relations = [relation for relation in head_relations if not abandon_rels(relation)]
         tail_relations = [relation for relation in tail_relations if not abandon_rels(relation)]
-    if pre_head:
-        tail_relations = list(set(tail_relations) - set(pre_relations))
-    else:
-        head_relations = list(set(head_relations) - set(pre_relations))
+    
+    if len(pre_relations)!=0 and pre_head !=-1:
+        tail_relations = [rel for rel in pre_relations if pre_head and rel not in tail_relations]
+        head_relations = [rel for rel in pre_relations if not pre_head and rel not in head_relations]
 
     head_relations = list(set(head_relations))
     tail_relations = list(set(tail_relations))
@@ -124,6 +119,7 @@ def all_zero(topn_scores):
     return all(score == 0 for score in topn_scores)
 
 def entity_search(entity, relation, wiki_client, head):
+
     rid = wiki_client.query_all("label2pid", relation)
     if not rid or rid == "Not Found!":
         return [], []
@@ -167,7 +163,7 @@ def entity_score(question, entity_candidates_id, entity_candidates, score, relat
     entity_candidates = list(entity_candidates)
     entity_candidates_id = list(entity_candidates_id)
 
-    prompt = construct_entity_score_prompt(question, relation, entity_candidates)
+    prompt = construct_entity_score_prompt(question, relation, entity_candidates, score)
 
     result = run_llm(prompt, args.temperature_exploration, args.max_length, args.opeani_api_keys, args.LLM_type)
     entity_scores = clean_scores(result, entity_candidates)
@@ -260,8 +256,8 @@ def if_true(prompt):
         return True
     return False
 
-def half_stop(question, cluster_chain_of_entities, depth, args):
-    print("No new knowledge added during search depth %d, stop searching." % depth)
+def half_stop(question, cluster_chain_of_entities, args):
+    print("No new knowledge added during search depth %d, stop searching." % args.depth)
     answer = generate_answer(question, cluster_chain_of_entities, args)
     save_2_jsonl(question, answer, cluster_chain_of_entities, file_name=args.dataset)
 
