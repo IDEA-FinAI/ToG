@@ -69,3 +69,6 @@ If you interested or inspired by this work, you can cite us by:
 
 # Claims
 This project uses the Apache 2.0 protocol. The project assumes no legal responsibility for any of the model's output and will not be held liable for any damages that may result from the use of the resources and output.
+
+# FYI
+We are looking for self-motivated interns at IDEA (Shenzhen). If you are interested in the topics of LLMs and KGs, please send us your resume by email. Our email address is xuchengjin@idea.edu.cn
