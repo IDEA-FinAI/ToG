@@ -3,11 +3,12 @@ import json
 import openai
 import re
 import time
-
+from utils import *
 
 def transform_relation(relation):
     relation_without_prefix = relation.replace("wiki.relation.", "").replace("_", " ")
     return relation_without_prefix
+
 
 def clean_relations(string, entity_id, head_relations):
     pattern = r"{\s*(?P<relation>[^()]+)\s+\(Score:\s+(?P<score>[0-9.]+)\)}"
@@ -33,37 +34,7 @@ def clean_relations(string, entity_id, head_relations):
     return True, relations
 
 
-
-def run_llm(prompt, temperature, max_tokens, opeani_api_keys, engine="gpt-3.5-turbo"):
-    if "llama" in engine.lower():
-        openai.api_key = "EMPTY"
-        openai.api_base = "http://localhost:8000/v1"  # your local llama server port
-        engine = openai.Model.list()["data"][0]["id"]
-    else:
-        openai.api_key = opeani_api_keys
-
-    messages = [{"role":"system","content":"You are an AI assistant that helps people find information."}]
-    message_prompt = {"role":"user","content":prompt}
-    messages.append(message_prompt)
-    f = 0
-    while(f == 0):
-        try:
-            response = openai.ChatCompletion.create(
-                    model=engine,
-                    messages = messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    frequency_penalty=0,
-                    presence_penalty=0)
-            result = response["choices"][0]['message']['content']
-            f = 1
-        except:
-            print("openai error, retry")
-            time.sleep(2)
-    return result
-
 def construct_relation_prune_prompt(question, entity_name, total_relations, args):
-
     return extract_relation_prompt_wiki % (args.width, args.width)+question+'\nTopic Entity: '+entity_name+ '\nRelations:\n'+'\n'.join([f"{i}. {item}" for i, item in enumerate(total_relations, start=1)])+'A:'
 
 
@@ -71,14 +42,17 @@ def check_end_word(s):
     words = [" ID", " code", " number", "instance of", "website", "URL", "inception", "image", " rate", " count"]
     return any(s.endswith(word) for word in words)
 
+
 def abandon_rels(relation):
     useless_relation_list = ["category's main topic", "topic\'s main category", "stack exchange site", 'main subject', 'country of citizenship', "commons category", "commons gallery", "country of origin", "country", "nationality"]
     if check_end_word(relation) or 'wikidata' in relation.lower() or 'wikimedia' in relation.lower() or relation.lower() in useless_relation_list:
         return True
     return False
 
+
 def construct_entity_score_prompt(question, relation, entity_candidates):
     return score_entity_candidates_prompt_wiki.format(question, relation) + "; ".join(entity_candidates) + '\nScore: '
+
 
 def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, question, args, wiki_client):
     relations = wiki_client.query_all("get_all_relations_of_an_entity", entity_id)
@@ -107,6 +81,7 @@ def relation_search_prune(entity_id, entity_name, pre_relations, pre_head, quest
     else:
         return [] # format error or too small max_length
     
+
 def del_all_unknown_entity(entity_candidates_id, entity_candidates_name):
     if len(entity_candidates_name) == 1 and entity_candidates_name[0] == "N/A":
         return entity_candidates_id, entity_candidates_name
@@ -120,8 +95,10 @@ def del_all_unknown_entity(entity_candidates_id, entity_candidates_name):
 
     return new_candidates_id, new_candidates_name
 
+
 def all_zero(topn_scores):
     return all(score == 0 for score in topn_scores)
+
 
 def entity_search(entity, relation, wiki_client, head):
     rid = wiki_client.query_all("label2pid", relation)
@@ -146,14 +123,6 @@ def entity_search(entity, relation, wiki_client, head):
     
     return id_list, name_list
 
-def clean_scores(string, entity_candidates):
-    scores = re.findall(r'\d+\.\d+', string)
-    scores = [float(number) for number in scores]
-    if len(scores) == len(entity_candidates):
-        return scores
-    else:
-        print("All entities are created equal.")
-        return [1/len(entity_candidates)] * len(entity_candidates)
 
 def entity_score(question, entity_candidates_id, entity_candidates, score, relation, args):
     if len(entity_candidates) == 1:
@@ -176,16 +145,6 @@ def entity_score(question, entity_candidates_id, entity_candidates, score, relat
     else:
         return [float(x) * score for x in entity_scores], entity_candidates, entity_candidates_id
 
-    
-def all_unknown_entity(entity_candidates):
-    return all(candidate == "UnName_Entity" for candidate in entity_candidates)
-
-def del_unknown_entity(entity_candidates):
-    if len(entity_candidates)==1 and entity_candidates[0]=="UnName_Entity":
-        return entity_candidates
-    entity_candidates = [candidate for candidate in entity_candidates if candidate != "UnName_Entity"]
-    return entity_candidates
-
 
 def update_history(entity_candidates, entity, scores, entity_candidates_id, total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head, value_flag):
     if value_flag:
@@ -199,9 +158,13 @@ def update_history(entity_candidates, entity, scores, entity_candidates_id, tota
     total_entities_id.extend(entity_candidates_id)
     total_topic_entities.extend(topic_entities)
     total_head.extend(head_num)
-
-
     return total_candidates, total_scores, total_relations, total_entities_id, total_topic_entities, total_head
+
+
+def half_stop(question, cluster_chain_of_entities, depth, args):
+    print("No new knowledge added during search depth %d, stop searching." % depth)
+    answer = generate_answer(question, cluster_chain_of_entities, args)
+    save_2_jsonl(question, answer, cluster_chain_of_entities, file_name=args.dataset)
 
 
 def generate_answer(question, cluster_chain_of_entities, args): 
@@ -210,13 +173,6 @@ def generate_answer(question, cluster_chain_of_entities, args):
     prompt += "\nKnowledge Triplets: " + chain_prompt + 'A: '
     result = run_llm(prompt, args.temperature_reasoning, args.max_length, args.opeani_api_keys, args.LLM_type)
     return result
-
-
-def save_2_jsonl(question, answer, cluster_chain_of_entities, file_name):
-    dict = {"question":question, "turbo_results": answer, "chains": cluster_chain_of_entities}
-    with open("ToG_{}.jsonl".format(file_name), "a") as outfile:
-        json_str = json.dumps(dict)
-        outfile.write(json_str + "\n")
 
 
 def entity_prune(total_entities_id, total_relations, total_candidates, total_topic_entities, total_head, total_scores, args, wiki_client):
@@ -234,6 +190,7 @@ def entity_prune(total_entities_id, total_relations, total_candidates, total_top
     cluster_chain_of_entities = [[(tops[i], relations[i], candidates[i]) for i in range(len(candidates))]]
     return True, cluster_chain_of_entities, entities_id, relations, heads
 
+
 def reasoning(question, cluster_chain_of_entities, args):
     prompt = prompt_evaluate_wiki + question
     chain_prompt = '\n'.join([', '.join([str(x) for x in chain]) for sublist in cluster_chain_of_entities for chain in sublist])
@@ -247,68 +204,5 @@ def reasoning(question, cluster_chain_of_entities, args):
     else:
         return False, response
     
-def extract_answer(text):
-    start_index = text.find("{")
-    end_index = text.find("}")
-    if start_index != -1 and end_index != -1:
-        return text[start_index+1:end_index].strip()
-    else:
-        return ""
+
     
-def if_true(prompt):
-    if prompt.lower().strip().replace(" ","")=="yes":
-        return True
-    return False
-
-def half_stop(question, cluster_chain_of_entities, depth, args):
-    print("No new knowledge added during search depth %d, stop searching." % depth)
-    answer = generate_answer(question, cluster_chain_of_entities, args)
-    save_2_jsonl(question, answer, cluster_chain_of_entities, file_name=args.dataset)
-
-
-def generate_without_explored_paths(question, args):
-    prompt = generate_directly + "\n\nQ: " + question + "\nA:"
-    response = run_llm(prompt, args.temperature_reasoning, args.max_length, args.opeani_api_keys, args.LLM_type)
-    return response
-
-def prepare_dataset(dataset_name):
-    if dataset_name == 'cwq':
-        with open('../data/cwq.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'question'
-    elif dataset_name == 'webqsp':
-        with open('../data/WebQSP.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'RawQuestion'
-    elif dataset_name == 'grailqa':
-        with open('../data/grailqa.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'question'
-    elif dataset_name == 'simpleqa':
-        with open('../data/SimpleQA.json',encoding='utf-8') as f:
-            datas = json.load(f)    
-        question_string = 'question'
-    elif dataset_name == 'qald':
-        with open('../data/qald_10-en.json',encoding='utf-8') as f:
-            datas = json.load(f) 
-        question_string = 'question'   
-    elif dataset_name == 'webquestions':
-        with open('../data/WebQuestions.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'question'
-    elif dataset_name == 'trex':
-        with open('../data/T-REX.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'input'    
-    elif dataset_name == 'zeroshotre':
-        with open('../data/Zero_Shot_RE.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'input'    
-    elif dataset_name == 'creak':
-        with open('../data/creak.json',encoding='utf-8') as f:
-            datas = json.load(f)
-        question_string = 'sentence'
-    else:
-        print("dataset not found")
-        exit(-1)
-    return datas, question_string

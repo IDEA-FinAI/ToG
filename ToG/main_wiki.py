@@ -3,6 +3,7 @@ import argparse
 import random
 from wiki_func import *
 from client import *
+from utils import *
 
 
 if __name__ == '__main__':
@@ -39,6 +40,10 @@ if __name__ == '__main__':
         question = data[question_string]
         topic_entity = data['qid_topic_entity']
         cluster_chain_of_entities = []
+        if len(topic_entity) == 0:
+            results = generate_without_explored_paths(question, args)
+            save_2_jsonl(question, results, [], file_name=args.dataset)
+            continue
         pre_relations = []
         pre_heads= [-1] * len(topic_entity)
         flag_printed = False
@@ -105,8 +110,13 @@ if __name__ == '__main__':
                     break
                 else:
                     print("depth %d still not find the answer." % depth)
-                    topic_entity = {qid: topic for qid, topic in zip(entities_id, [wiki_client.query_all("qid2label", entity).pop() for entity in entities_id])}
-                    continue
+                    flag_finish, entities_id = if_finish_list(entities_id)
+                    if flag_finish:
+                        half_stop(question, cluster_chain_of_entities, depth, args)
+                        flag_printed = True
+                    else:
+                        topic_entity = {qid: topic for qid, topic in zip(entities_id, [wiki_client.query_all("qid2label", entity).pop() for entity in entities_id])}
+                        continue
             else:
                 half_stop(question, cluster_chain_of_entities, depth, args)
                 flag_printed = True

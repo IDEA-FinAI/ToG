@@ -1,6 +1,7 @@
 from tqdm import tqdm
 import argparse
 from utils import *
+from freebase_func import *
 import random
 from client import *
 
@@ -37,6 +38,10 @@ if __name__ == '__main__':
         question = data[question_string]
         topic_entity = data['topic_entity']
         cluster_chain_of_entities = []
+        if len(topic_entity) == 0:
+            results = generate_without_explored_paths(question, args)
+            save_2_jsonl(question, results, [], file_name=args.dataset)
+            continue
         pre_relations = []
         pre_heads= [-1] * len(topic_entity)
         flag_printed = False
@@ -87,8 +92,13 @@ if __name__ == '__main__':
                     break
                 else:
                     print("depth %d still not find the answer." % depth)
-                    topic_entity = {entity: id2entity_name_or_type(entity) for entity in entities_id}
-                    continue
+                    flag_finish, entities_id = if_finish_list(entities_id)
+                    if flag_finish:
+                        half_stop(question, cluster_chain_of_entities, depth, args)
+                        flag_printed = True
+                    else:
+                        topic_entity = {entity: id2entity_name_or_type(entity) for entity in entities_id}
+                        continue
             else:
                 half_stop(question, cluster_chain_of_entities, depth, args)
                 flag_printed = True
