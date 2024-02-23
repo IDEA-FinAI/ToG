@@ -1,6 +1,9 @@
 # ToG
-
 The code for paper: ["Think-on-Graph: Deep and Responsible Reasoning of Large Language Model on Knowledge Graph"](https://arxiv.org/pdf/2307.07697.pdf).
+
+## News!
+Our paper is accepted by ICLR 2024 🥳🥳🥳.
+
 
 ## Here is the illustration of ToG:
 
