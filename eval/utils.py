@@ -104,6 +104,8 @@ def check_string(string):
     return "{" in string
 
 def clean_results(string):
+    if string.lower().startswith('{yes}'):
+        string = string[5:]
     if "{" in string:
         start = string.find("{") + 1
         end = string.find("}")
